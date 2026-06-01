@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import os
-import plotly.express as px
-from gerador_arte_feedback import criar_carrossel_feedback
 
 st.set_page_config(page_title="Feedback Pós-Jogo", layout="wide", page_icon="🏉")
 
@@ -86,11 +84,24 @@ with st.form("form_feedback"):
                 "Comentário Aberto": pergunta_aberta
             }
             df_novo = pd.DataFrame([novo_feedback])
+            
             if os.path.exists(arquivo_dados):
-                df_final = pd.concat([pd.read_csv(arquivo_dados), df_novo], ignore_index=True)
-            else: df_final = df_novo
+                df_existente = pd.read_csv(arquivo_dados)
+                
+                # --- A TRAVA DE SEGURANÇA AQUI ---
+                # Se o jogador já está na planilha, deleta a linha velha dele
+                if jogador in df_existente['Jogador'].values:
+                    df_existente = df_existente[df_existente['Jogador'] != jogador]
+                    st.info("🔄 Notamos que você já havia enviado. Sua resposta foi atualizada com os novos dados!")
+                else:
+                    st.success("✅ Salvo com sucesso! Sua avaliação foi enviada para o treinador.")
+                    
+                df_final = pd.concat([df_existente, df_novo], ignore_index=True)
+            else: 
+                df_final = df_novo
+                st.success("✅ Salvo com sucesso! Sua avaliação foi enviada para o treinador.")
+                
             df_final.to_csv(arquivo_dados, index=False)
-            st.success("✅ Salvo com sucesso! Sua avaliação foi enviada para o treinador.")
 
 # ==========================================
 # VISÃO PRIVADA (SÓ APARECE COM A SENHA "MAMUTE")
@@ -99,14 +110,20 @@ if senha_acesso.upper() == "MAMUTE":
     st.divider()
     st.title("🖥️ Painel de Comando do Treinador")
     
-    tab_dados, tab_antimigue, tab_arte = st.tabs(["📊 Compilado de Dados", "🚨 Controle (Anti-Migué)", "📸 Gerar Carrossel (Instagram)"])
+    tab_dados, tab_antimigue = st.tabs(["📊 Compilado de Dados", "🚨 Controle (Anti-Migué)"])
 
     # --- ABA DADOS ---
     with tab_dados:
+        st.markdown("Faça o Download do `.csv` aqui para gerar as artes no seu computador.")
         if os.path.exists(arquivo_dados):
             df = pd.read_csv(arquivo_dados)
-            st.metric("Total de Respostas", len(df))
-            st.dataframe(df) # Mostra a tabela crua para você conferir
+            st.metric("Total de Votos Únicos", len(df))
+            st.dataframe(df)
+            
+            # Adicionando um botão de "Zerar Dados" para o próximo jogo
+            if st.button("🗑️ Limpar dados para o PRÓXIMO JOGO", type="secondary"):
+                os.remove(arquivo_dados)
+                st.success("Planilha zerada! O sistema está pronto para a próxima rodada.")
         else:
             st.warning("Nenhum dado coletado.")
 
@@ -136,39 +153,3 @@ if senha_acesso.upper() == "MAMUTE":
             with col_ok:
                 st.success(f"✅ Já Responderam ({len([j for j in jogadores_escalados if j in responderam])})")
                 for j in [j for j in jogadores_escalados if j in responderam]: st.write(f"- {j}")
-
-    # --- ABA ARTE FINAL (CARROSSEL) ---
-    with tab_arte:
-        st.markdown("### Preencha os dados para gerar o Carrossel do Instagram")
-        
-        col_j1, col_j2 = st.columns(2)
-        with col_j1:
-            data_str = st.text_input("Data do Jogo", "31/05/2026")
-            local_str = st.text_input("Local", "CEPEUSP")
-            adv_str = st.text_input("Adversário", "Poli")
-        with col_j2:
-            pontos_nos = st.text_input("Nossos Pontos", "50")
-            pontos_eles = st.text_input("Pontos Deles", "14")
-            
-        st.markdown("#### Seus Comentários Técnicos")
-        txt_geral = st.text_area("Comentário Geral:", "A equipe manteve a intensidade durante os 80 minutos. A transição e o apoio garantiram a continuidade da bola viva.")
-        txt_fwd = st.text_area("Comentário Forwards:", "Scrum dominante. Excelente leitura de espaço e limpeza de ruck nos momentos de desordem.")
-        txt_backs = st.text_area("Comentário Backs:", "Tomada de decisão agressiva e Parede Sonora impecável nas subidas defensivas.")
-        
-        if st.button("📸 Desenhar Carrossel Completo (4 Imagens)", type="primary"):
-            if os.path.exists(arquivo_dados):
-                df = pd.read_csv(arquivo_dados)
-                detalhes = {"data": data_str, "local": local_str, "adversario": adv_str, "placar_nos": pontos_nos, "placar_eles": pontos_eles}
-                comentarios = {"geral": txt_geral, "forwards": txt_fwd, "backs": txt_backs}
-                
-                with st.spinner("Desenhando Carrossel..."):
-                    imagens = criar_carrossel_feedback(df, detalhes, comentarios)
-                    st.success("Carrossel gerado com sucesso!")
-                    
-                    c1, c2, c3, c4 = st.columns(4)
-                    with c1: st.image(imagens[0], caption="1. Capa")
-                    with c2: st.image(imagens[1], caption="2. Análise")
-                    with c3: st.image(imagens[2], caption="3. Votos")
-                    with c4: st.image(imagens[3], caption="4. Radar")
-            else:
-                st.error("Nenhum dado coletado para desenhar as artes.")
